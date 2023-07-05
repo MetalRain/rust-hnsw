@@ -5,6 +5,7 @@ use std::io::{self, BufRead, BufReader, Lines};
 use std::convert::AsRef;
 use std::path::Path;
 use std::vec::Vec;
+use std::collections::{HashMap};
 
 use unicode_normalization::UnicodeNormalization;
 
@@ -32,6 +33,7 @@ fn pre_tokenize(phrase: String) -> Vec<String> {
         .collect::<Vec<String>>()
 }
 
+
 fn load_corpus_file(name: &str) -> impl Iterator<Item = Vec<String>> {
     let filename = "./data/".to_owned() + name;
 
@@ -42,9 +44,84 @@ fn load_corpus_file(name: &str) -> impl Iterator<Item = Vec<String>> {
         .map(|phrase| pre_tokenize(phrase))
 }
 
+struct WordPiece {
+    corpus: HashMap<String, u64>,
+    vocabulary: HashMap<String, u32>,
+}
+
+impl WordPiece {
+    fn new(phrases: impl Iterator<Item = Vec<String>>) -> WordPiece {
+        let mut corpus: HashMap<String, u64> = HashMap::new();
+        for phrase in phrases {
+            for token in phrase {
+                let count = corpus.entry(token)
+                    .or_insert(0);
+                *count += 1;
+            }
+        };
+        let model = WordPiece{
+            corpus: corpus.clone(),
+            vocabulary: Self::initialize_vocabulary(corpus)
+        };
+        model
+    }
+
+    /// Initialize small vocabulary from corpus
+    /// vocabulary will be later increased by increase_vocabulary
+    fn initialize_vocabulary(corpus: HashMap<String, u64>) -> HashMap<String, u32> {
+        let mut vocabulary = HashMap::new();
+        let pieces = corpus.keys()
+            .flat_map(|token| token.chars());
+        for (i, piece) in pieces.enumerate() {
+            vocabulary.insert(piece.to_string(), i as u32);
+        }
+        vocabulary
+    }
+
+    fn add_piece(&mut self, piece: String){
+        self.vocabulary.insert(piece, self.vocabulary.len() as u32 + 1u32);
+    }
+
+    fn increase_vocabulary(&self) {
+        // TODO: implement merges
+    }
+
+    fn tokenize(&self, phrase: String) -> Vec<u32> {
+        let mut tokens = Vec::new();
+        let normalized = pre_tokenize(normalize(phrase));
+        println!("Normalized: {:?}", &normalized);
+
+        for token in normalized {
+            let mut slice = token.as_str();
+            // Find matching vocabulary pieces until
+            // token is filled
+            loop {
+                for (piece, id) in self.vocabulary.iter() {
+                    let l = piece.len();
+                    let piece_slice = piece.as_str();
+                    if &slice[0..l] == piece_slice {
+                        slice = &slice[l..];
+                        tokens.push(id.clone());
+                        break;
+                    }
+                }
+                if (slice.len() == 0){
+                    break;
+                }
+            }
+        }
+        tokens
+    }
+}
+
 
 pub fn update_tokenizer() {
-    let lines = load_corpus_file("t8.shakespeare.txt");
+    let phrases = load_corpus_file("t8.shakespeare.txt");
+    let model = WordPiece::new(phrases);
+    println!("Tokens: {}, Vocabulary size: {}", model.corpus.len(), model.vocabulary.len());
+    println!("Vocabulary: {:?}", model.vocabulary);
 
-    println!("Lines {}", lines.collect::<Vec<_>>().len());
+    let phrase = "You are dirt";
+    let tokens = model.tokenize(phrase.clone().to_string());
+    println!("{}, tokens: {:?}", phrase, tokens);
 }
