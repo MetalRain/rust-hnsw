@@ -44,13 +44,13 @@ fn load_corpus_file(name: &str) -> impl Iterator<Item = Vec<String>> {
         .map(|phrase| pre_tokenize(phrase))
 }
 
-struct WordPiece {
+struct TokenizerModel {
     corpus: HashMap<String, u64>,
     vocabulary: HashMap<String, u32>,
 }
 
-impl WordPiece {
-    fn new(phrases: impl Iterator<Item = Vec<String>>) -> WordPiece {
+impl TokenizerModel {
+    fn new(phrases: impl Iterator<Item = Vec<String>>, size: u32) -> TokenizerModel {
         let mut corpus: HashMap<String, u64> = HashMap::new();
         for phrase in phrases {
             for token in phrase {
@@ -59,10 +59,19 @@ impl WordPiece {
                 *count += 1;
             }
         };
-        let model = WordPiece{
-            corpus: corpus.clone(),
-            vocabulary: Self::initialize_vocabulary(corpus)
+        let vocabulary = TokenizerModel::initialize_vocabulary(corpus.clone());
+        let mut model = TokenizerModel{
+            corpus: corpus,
+            vocabulary: vocabulary,
         };
+        let mut pieces_remaining = size - model.vocabulary.len() as u32;
+        loop {
+            pieces_remaining -= 1;
+            model.increase_vocabulary();
+            if pieces_remaining <= 0 {
+                break;
+            }
+        }
         model
     }
 
@@ -84,6 +93,7 @@ impl WordPiece {
 
     fn increase_vocabulary(&self) {
         // TODO: implement merges
+         
     }
 
     fn tokenize(&self, phrase: String) -> Vec<u32> {
@@ -105,7 +115,8 @@ impl WordPiece {
                         break;
                     }
                 }
-                if (slice.len() == 0){
+                // TODO: special case for characters not found in vocabulary
+                if slice.len() == 0 {
                     break;
                 }
             }
@@ -117,7 +128,7 @@ impl WordPiece {
 
 pub fn update_tokenizer() {
     let phrases = load_corpus_file("t8.shakespeare.txt");
-    let model = WordPiece::new(phrases);
+    let model = TokenizerModel::new(phrases, 120u32);
     println!("Tokens: {}, Vocabulary size: {}", model.corpus.len(), model.vocabulary.len());
     println!("Vocabulary: {:?}", model.vocabulary);
 
